@@ -1,0 +1,48 @@
+import serial
+import socket
+import re
+
+SERIAL_PORT = "/dev/ttyUSB0"   # Update for your RPi
+BAUD_RATE = 115200
+
+UDP_IP = "192.168.10.12"
+UDP_PORT = 5005
+
+def parse_distance(line):
+    """
+    Accepts:
+      'Distance: 123.4 cm'
+      '123.4'
+      '123.4 cm'
+    Returns: 'distance=123.4'
+    """
+    match = re.search(r"([\d\.]+)", line)
+    if match:
+        value = match.group(1)
+        return f"distance={value}"
+    return None
+
+def read_serial():
+    try:
+        with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1) as ser:
+            print(f"[TX] Listening on {SERIAL_PORT}...")
+            while True:
+                line = ser.readline().decode("utf-8", "ignore").strip()
+                if line:
+                    print(f"[TX] Raw: {line}")
+                    parsed = parse_distance(line)
+                    if parsed:
+                        print(f"[TX] Parsed: {parsed}")
+                        yield parsed
+    except serial.SerialException as e:
+        print(f"[TX] Serial error: {e}")
+
+def broadcast(data):
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(data.encode("utf-8"), (UDP_IP, UDP_PORT))
+        print(f"[TX] Sent: {data}")
+
+if __name__ == "__main__":
+    for packet in read_serial():
+        broadcast(packet)
